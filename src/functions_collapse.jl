@@ -387,6 +387,8 @@ function write_tip_to_redundant_seq_relationships(D, filepath, retained)
         for (key, value) in D
             # subtract retained sequences from the set that is represented
             value = setdiff(value, retained)
+            # and subtract tips
+            value = setdiff(value, keys(D))
             # ignore sequences that represent no other sequences:
             if length(value) == 0
                 continue
