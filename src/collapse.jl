@@ -37,7 +37,12 @@ function main()
         dels = read_del_file(parsed_args["dels-file"])
         nucleotide_array_dels, A_genotypes_table = type_deletions_and_append_as_SNP(nucleotide_array, dels)
 
-        pairwise_identity = is_same(nucleotide_array_dels)
+        if Threads.nthreads() == 1
+            pairwise_identity = is_same(nucleotide_array_dels)
+        else
+            pairwise_identity = parallel_is_same(nucleotide_array_dels)
+        end
+
         println("sequence comparisons complete")
 
         final_sets = get_sets_in_one_go(pairwise_identity)
@@ -55,7 +60,12 @@ function main()
         end
 
     else
-        pairwise_identity = is_same(nucleotide_array)
+        if Threads.nthreads() == 1
+            pairwise_identity = is_same(nucleotide_array)
+        else
+            pairwise_identity = parallel_is_same(nucleotide_array)
+        end
+
         println("sequence comparisons complete")
 
         final_sets = get_sets_in_one_go(pairwise_identity)

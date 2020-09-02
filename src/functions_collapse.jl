@@ -1,4 +1,5 @@
 using StatsBase
+using Roots
 
 include("functions_align.jl")
 
@@ -8,6 +9,8 @@ function is_same(nuc_bit_array)
     same_array_size = size(nuc_bit_array, 2)
 
     same_array = trues(same_array_size, same_array_size)
+
+    println("number of threads for sequence comparisons: ", Threads.nthreads())
 
     for a in 1:size(nuc_bit_array,2) - 1
         for b in (a + 1):size(nuc_bit_array,2)
@@ -29,43 +32,116 @@ function is_same(nuc_bit_array)
     return same_array
 end
 
-# # attempt at parallel version of the above
-# using SharedArrays
-# using Distributed
-#
-# function parallel_is_same(nuc_bit_array)
-#     same_array_size = size(nuc_bit_array, 2)
-#
-#     # initialises as falses so have to change this:
-#     same_array = SharedArray{Bool,2}((same_array_size,same_array_size))
-#
-#     for i in 1:size(same_array, 2)
-#         same_array[i,i] = true
-#     end
-#
-#     # comb_test=0
-#     @sync @distributed for a in 1:size(nuc_bit_array,2) - 1
-#         for b in (a + 1):size(nuc_bit_array,2)
-#             # comb_test+=1
-#             all_same = true
-#             for r in Iterators.reverse(1:size(nuc_bit_array,1))
-#                 @inbounds x = nuc_bit_array[r,a]
-#                 @inbounds y = nuc_bit_array[r,b]
-#                 different = (x & y) < 16
-#
-#                 # store the different True/False result in an array:
-#                 if different
-#                     all_same = false
-#                     break
-#                 end
-#             end
-#             same_array[a,b] = all_same
-#             same_array[b,a] = all_same
-#         end
-#     end
-#     # println(comb_test)
-#     return sdata(same_array)
-# end
+
+# Functions for parallelising
+# ---------------------------
+
+# This to provide the chunks to chop up the n*n matrix into approximately equal
+# amounts of work per thread when we parallelise it.
+
+# Because we are effectively only working on one triangle of a square matrix,
+# the first rows have many more columns to fill, so that giving threads
+# equal numbers of rows to populate means very unequal amounts of work, per thread.
+
+# Instead, we chop up the triangle into equal-area trapezoids.
+
+
+# For a given sample size (n) and quantile (q), generate an expression that
+# we can find the root for (solve for x) - this will provide the row number
+# that splits a right-angled triangle of area n^2 / 2 into quantiles q & 1-q by
+# area:
+function make_equation(n, q)
+    f = x-> x * n  - ((x^2 + x) / 2) - ((n^2 - n) / 2) * q
+    return f
+end
+
+# get many splits:
+function get_chunk_splits(n, q_Array)
+    chunk_splits = Array{Int, 1}(undef, length(q_Array))
+    for (i, q) in enumerate(q_Array)
+        f = make_equation(n, q)
+        split = find_zero(f, (0, n), Bisection())
+        chunk_splits[i] = floor(split)
+    end
+
+    return chunk_splits
+end
+
+# turn the splits into chunks that are ranges to iterate over:
+function get_ranges(n, N_threads)
+    q_Array = Array{Float64, 1}(undef, N_threads - 1)
+    for i in Iterators.reverse(1:N_threads - 1)
+        q_Array[i] = i/N_threads
+    end
+
+    chunk_splits = get_chunk_splits(n, q_Array)
+
+    ranges = Array{Tuple{Int, Int}, 1}(undef, N_threads)
+    previous_finish = 0
+    for (i,split) in enumerate(chunk_splits)
+        start = previous_finish + 1
+        finish = split
+        ranges[i] = (start, finish)
+        previous_finish = finish
+    end
+    ranges[lastindex(ranges)] = (previous_finish + 1, n - 1)
+
+    return ranges
+end
+
+# A parallel version of is_same()
+function parallel_is_same(nuc_bit_array)
+    same_array_size = size(nuc_bit_array, 2)
+
+    # initialises as falses so have to change this:
+    # same_array = SharedArray{Bool,2}((same_array_size,same_array_size))
+    same_array = Array{Bool,2}(undef, same_array_size, same_array_size)
+
+    for i in 1:size(same_array, 2)
+        same_array[i,i] = true
+    end
+
+    # make as many chunks as we have threads
+    n_Chunks = Threads.nthreads()
+
+    # ...unless we have too many threads for this many sequences, in which case, down-size.
+    # A chunk size less than or equal to half the total number of sequences makes valid ranges
+    if n_Chunks > size(nuc_bit_array, 2) / 2
+        n_Chunks::Int = floor(size(nuc_bit_array, 2) / 2)
+    end
+
+    ranges = get_ranges(size(nuc_bit_array, 2), n_Chunks)
+
+    println("number of threads for sequence comparisons: ", Threads.nthreads())
+    # println("number of chunks: ", length(ranges))
+
+    Threads.@threads for range in ranges
+        for a in range[1]:range[2]
+            for b in (a + 1):size(nuc_bit_array,2)
+                # comb_test+=1
+                all_same = true
+                for r in Iterators.reverse(1:size(nuc_bit_array,1))
+                    @inbounds x = nuc_bit_array[r,a]
+                    @inbounds y = nuc_bit_array[r,b]
+                    different = (x & y) < 16
+
+                    # store the different True/False result in an array:
+                    if different
+                        all_same = false
+                        break
+                    end
+                end
+                same_array[a,b] = all_same
+                same_array[b,a] = all_same
+            end
+        end
+    end
+
+    return same_array
+end
+
+# end of functions for parallelising
+# ---------------------------
 
 function get_one_set_from_view(bool_view)
     # one subset of rows of the view
