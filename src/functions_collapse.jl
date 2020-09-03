@@ -190,7 +190,7 @@ function get_subsets(array_of_sets)
             end
             # if array_of_sets[i] is a superset of comparison set, then break, else push to A
             # (note the reverse logic here, because there is no superset function)
-            if issubset(array_of_sets[j], array_of_sets[i])
+            if issubset(array_of_sets[j], array_of_sets[i]) && array_of_sets[i] != array_of_sets[j]
                 valid = false
                 break
             end
