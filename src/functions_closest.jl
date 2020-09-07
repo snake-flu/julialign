@@ -1,6 +1,7 @@
 using StatsBase
 
 include("functions_align.jl")
+include("functions_encoding.jl")
 
 function get_difference_matrix(target_A, query_A)
 
@@ -90,23 +91,8 @@ function get_best_target_index(differences_V, completeness_V)
 end
 
 function get_SNPs(target_V, query_V)
-    nuc_dict = Dict{UInt8, Char}(136 => 'A',
-                                 72 => 'G',
-                                 40 => 'C',
-                                 24 => 'T',
-                                 192 => 'R',
-                                 160 => 'M',
-                                 144 => 'W',
-                                 96 => 'S',
-                                 80 => 'K',
-                                 48 => 'Y',
-                                 224 => 'V',
-                                 176 => 'H',
-                                 208 => 'D',
-                                 112 => 'B',
-                                 240 => 'N',
-                                 244 => '-',
-                                 242 => '?')
+    nuc_dict = make_nuc_dict()
+
     SNPs = Array{String, 1}()
     for r in 1:length(target_V)
         @inbounds x = target_V[r]

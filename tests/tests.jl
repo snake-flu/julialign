@@ -1,4 +1,4 @@
-
+include("../src/functions_encoding.jl")
 
 lookup_char = Dict{Char, Array{Char,1}}('A' => ['A'],
                                         'C' => ['C'],
@@ -18,25 +18,8 @@ lookup_char = Dict{Char, Array{Char,1}}('A' => ['A'],
                                         '?' => ['A', 'C', 'G', 'T'],
                                         '-' => ['A', 'C', 'G', 'T']  )
 
-lookup_byte =  Dict{Char, UInt8}(   'A' => 136,
-                                    'G' => 72,
-                                    'C' => 40,
-                                    'T' => 24,
-                                    'R' => 192,
-                                    'M' => 160,
-                                    'W' => 144,
-                                    'S' => 96,
-                                    'K' => 80,
-                                    'Y' => 48,
-                                    'V' => 224,
-                                    'H' => 176,
-                                    'D' => 208,
-                                    'B' => 112,
-                                    'N' => 240,
-                                    '-' => 244,
-                                    '?' => 242)
-
-
+# this is from functions_encoding.jl:
+byte_dict = make_byte_dict()
 
 function test_nucs()
     nucs = ['A', 'G', 'C', 'T', 'R', 'M', 'W', 'S', 'K', 'Y', 'V', 'H', 'D', 'B', 'N', '-', '?']
@@ -52,8 +35,8 @@ function test_nucs()
             nuc1_chars = lookup_char[nuc1]
             nuc2_chars = lookup_char[nuc2]
 
-            byte1 = lookup_byte[nuc1]
-            byte2 = lookup_byte[nuc2]
+            byte1 = byte_dict[nuc1]
+            byte2 = byte_dict[nuc2]
 
             byte_different = (byte1 & byte2) < 16
             byte_same = (byte1 & 8 == 8) && byte1 == byte2
@@ -64,11 +47,11 @@ function test_nucs()
             push!(tests, byte_different == nuc_different && byte_same == nuc_same)
         end
     end
-    
+
     println(all(tests))
 end
 
-
+test_nucs()
 
 
 

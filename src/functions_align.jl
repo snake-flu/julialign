@@ -1,3 +1,5 @@
+include("functions_encoding.jl")
+
 #=
 See - http://ape-package.ird.fr/misc/BitLevelCodingScheme.html for the bit-level
 coding scheme :
@@ -171,23 +173,7 @@ function read_fasta_alignment(filepath::AbstractString, channel::Channel)
 end
 
 function populate_byte_array(filepath::AbstractString)
-    byte_dict = Dict{Char, UInt8}('A' => 136,
-                                    'G' => 72,
-                                    'C' => 40,
-                                    'T' => 24,
-                                    'R' => 192,
-                                    'M' => 160,
-                                    'W' => 144,
-                                    'S' => 96,
-                                    'K' => 80,
-                                    'Y' => 48,
-                                    'V' => 224,
-                                    'H' => 176,
-                                    'D' => 208,
-                                    'B' => 112,
-                                    'N' => 240,
-                                    '-' => 244,
-                                    '?' => 242)
+    byte_dict = make_byte_dict()
 
     alignment_dim = get_alignment_dimensions(filepath)
     height = alignment_dim[1]
@@ -213,23 +199,7 @@ function populate_byte_array(filepath::AbstractString)
 end
 
 function get_seq_from_1D_byte_array(byte_V)
-    nuc_dict = Dict{UInt8, Char}(136 => 'A',
-                                 72 => 'G',
-                                 40 => 'C',
-                                 24 => 'T',
-                                 192 => 'R',
-                                 160 => 'M',
-                                 144 => 'W',
-                                 96 => 'S',
-                                 80 => 'K',
-                                 48 => 'Y',
-                                 224 => 'V',
-                                 176 => 'H',
-                                 208 => 'D',
-                                 112 => 'B',
-                                 240 => 'N',
-                                 244 => '-',
-                                 242 => '?')
+    nuc_dict = make_nuc_dict()
 
     char_V = Array{Char, 1}(undef, length(byte_V))
 
@@ -241,23 +211,7 @@ function get_seq_from_1D_byte_array(byte_V)
 end
 
 function score_alignment_column(nuc_bit_sequence)
-    score_dict = Dict{UInt8, Int64}(136 => 12,
-                                     72 => 12,
-                                     40 => 12,
-                                     24 => 12,
-                                     192 => 6,
-                                     160 => 6,
-                                     144 => 6,
-                                     96 => 6,
-                                     80 => 6,
-                                     48 => 6,
-                                     224 => 4,
-                                     176 => 4,
-                                     208 => 4,
-                                     112 => 4,
-                                     240 => 3,
-                                     244 => 3,
-                                     242 => 3)
+    score_dict = make_score_dict()
 
     score = 0::Int64
     for nuc in nuc_bit_sequence

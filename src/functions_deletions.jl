@@ -1,3 +1,5 @@
+include("functions_encoding.jl")
+
 function read_del_file(file_path)
     # input file is in the format:
     # start (1-based), reference allele
@@ -16,23 +18,8 @@ end
 
 function type_deletions(nuc_bit_array, del_tuple_array)
     # type specific deletions in an alignment
-    byte_dict = Dict{Char, UInt8}('A' => 136,
-                                    'G' => 72,
-                                    'C' => 40,
-                                    'T' => 24,
-                                    'R' => 192,
-                                    'M' => 160,
-                                    'W' => 144,
-                                    'S' => 96,
-                                    'K' => 80,
-                                    'Y' => 48,
-                                    'V' => 224,
-                                    'H' => 176,
-                                    'D' => 208,
-                                    'B' => 112,
-                                    'N' => 240,
-                                    '-' => 244,
-                                    '?' => 242)
+
+    byte_dict = make_byte_dict()
 
     # A will be returned: it is an array of strings, one column for every sequence
     # in the alignment, one row for every deletion to be typed. Entries in cells can
@@ -73,23 +60,8 @@ end
 function type_deletions_and_append_as_SNP(nuc_bit_array, del_tuple_array)
     # type specific deletions in an alignment
     # and append(/prepend?) them as genotypes
-    byte_dict = Dict{Char, UInt8}('A' => 136,
-                                    'G' => 72,
-                                    'C' => 40,
-                                    'T' => 24,
-                                    'R' => 192,
-                                    'M' => 160,
-                                    'W' => 144,
-                                    'S' => 96,
-                                    'K' => 80,
-                                    'Y' => 48,
-                                    'V' => 224,
-                                    'H' => 176,
-                                    'D' => 208,
-                                    'B' => 112,
-                                    'N' => 240,
-                                    '-' => 244,
-                                    '?' => 242)
+
+    byte_dict = make_byte_dict()
 
     # A will be returned: it is an array of strings, one column for every sequence
     # in the alignment, one row for eery deletion to be typed. Entries in cells can
