@@ -54,9 +54,9 @@ function main()
         safe_sets_test = TEST_compare_within_sets(collect(final_sets), nucleotide_array_dels)
 
         if parsed_args["append-as-snp"]
-            tip_to_seq_relationships = write_highest_scoring_unused_seq(final_sets, parsed_args["retain"], nucleotide_array_dels, fasta_IDs, parsed_args["outfile"], false)
+            tip_to_seq_relationships = write_most_different_unused_seq(pairwise_identity, final_sets, parsed_args["retain"], nucleotide_array_dels, fasta_IDs, parsed_args["outfile"], false)
         else
-            tip_to_seq_relationships = write_highest_scoring_unused_seq(final_sets, parsed_args["retain"], nucleotide_array, fasta_IDs, parsed_args["outfile"], false)
+            tip_to_seq_relationships = write_most_different_unused_seq(pairwise_identity, final_sets, parsed_args["retain"], nucleotide_array, fasta_IDs, parsed_args["outfile"], false)
         end
 
     else
@@ -76,7 +76,7 @@ function main()
 
         safe_sets_test = TEST_compare_within_sets(collect(final_sets), nucleotide_array)
 
-        tip_to_seq_relationships = write_highest_scoring_unused_seq(final_sets, parsed_args["retain"], nucleotide_array, fasta_IDs, parsed_args["outfile"], false)
+        tip_to_seq_relationships = write_most_different_unused_seq(pairwise_identity, final_sets, parsed_args["retain"], nucleotide_array, fasta_IDs, parsed_args["outfile"], false)
     end
 
     println("safe sets test (true/false): ", safe_sets_test)

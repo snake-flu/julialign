@@ -220,7 +220,6 @@ function score_alignment_column(nuc_bit_sequence)
     return score
 end
 
-
 function score_alignment(nuc_bit_array)
 
     A = fill(0::Int64, size(nuc_bit_array, 2))
