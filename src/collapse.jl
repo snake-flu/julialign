@@ -12,7 +12,7 @@ function parse_commandline()
             help = "the alignment to collapse, in fasta format"
             required = true
         "--reference"
-            help = "the reference sequence, in fasta format (for speed?)"
+            help = "the reference sequence, in fasta format"
             required = true
         "--outfile", "-o"
             help = "the name of the reduced alignment to write"
@@ -103,7 +103,7 @@ function main()
     if parsed_args["check"]
         println("safe sets test (true/false): ", safe_sets_test)
     end
-    
+
     println("number of sequences in output alignment: ", length(keys(tip_to_seq_relationships)))
 
     write_tip_to_redundant_seq_relationships(tip_to_seq_relationships, parsed_args["rel1"], parsed_args["retain"])
