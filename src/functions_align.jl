@@ -1,74 +1,46 @@
 include("functions_encoding.jl")
 
-#=
-See - http://ape-package.ird.fr/misc/BitLevelCodingScheme.html for the bit-level
-coding scheme :
 
-Nucleotide	    IUPAC code	 Bit-level code	  Value
----------------------------------------------------
-A	                  A	      10001000	       136
-G	                  G	      01001000	        72
-C	                  C	      00101000	        40
-T	                  T	      00011000	        24
-A or G	              R	      11000000	       192
-A or C	              M	      10100000	       160
-A or T	              W	      10010000	       144
-G or C	              S	      01100000	        96
-G or T	              K	      01010000	        80
-C or T	              Y	      00110000	        48
-A or G or C	          V	      11100000	       224
-A or C or T	          H	      10110000	       176
-A or G or T	          D	      11010000	       208
-G or C or T	          B	      01110000	       112
-A or G or C or T      N	      11110000	       240
-Alignment gap        (–)	  00000100	         4
-Unknown character    (?)	  00000010	         2
----------------------------------------------------
+# get_index_of_diff_sites returns an array of integers which are the sites
+# at which two vectors of bit-level encoded nucleotides differ
+# NB nuc_bit_V_A should be the reference, as it stands, because we ignore N/-/?
+# in nuc_bit_V_B
+function get_index_of_diff_sites(nuc_bit_V_A, nuc_bit_V_B)
+
+    A = Array{Int, 1}()
+
+    for i in 1:length(nuc_bit_V_A)
+
+        @inbounds x = nuc_bit_V_A[i]
+        @inbounds y = nuc_bit_V_B[i]
+
+        if x != y && y < 240
+            push!(A, i)
+        end
+    end
+
+    return A
+end
 
 
-This has been adapated (last two rows have changed) to
-allow matches between alignment gaps / ? and any nucleotide:
+# get_list_of_differences applies get_index_of_diff_sites between nuc_bit_V_A
+# and every sequence stored in nuc_bit_array
+function get_list_of_differences(nuc_bit_array, nuc_bit_V_A)
 
-Nucleotide	    IUPAC code	 Bit-level code	  Value
----------------------------------------------------
-A	                  A	      10001000	       136
-G	                  G	      01001000	        72
-C	                  C	      00101000	        40
-T	                  T	      00011000	        24
-A or G	              R	      11000000	       192
-A or C	              M	      10100000	       160
-A or T	              W	      10010000	       144
-G or C	              S	      01100000	        96
-G or T	              K	      01010000	        80
-C or T	              Y	      00110000	        48
-A or G or C	          V	      11100000	       224
-A or C or T	          H	      10110000	       176
-A or G or T	          D	      11010000	       208
-G or C or T	          B	      01110000	       112
-A or G or C or T      N	      11110000	       240
-Alignment gap        (–)	  11110100	       244  ###### CHANGED
-Unknown character    (?)	  11110010	       242  ###### CHANGED
----------------------------------------------------
+    L = Array{Array{Int, 1}, 1}(undef, size(nuc_bit_array, 2))
 
+    for i in 1:length(L)
+        L[i] = get_index_of_diff_sites(nuc_bit_V_A, view(nuc_bit_array, :, i))
+    end
 
-Function	               C code	                      Value returned
-------------------------------------------------------------------------------------------
-KnownBase(a)	           a & 8	                      8 if a is known surely
-IsAdenine(a)	           a == 136	                      1 if a is adenine
-IsGuanine(a)	           a == 72	                      1 if a is guanine
-IsCytosine(a)       	   a == 40	                      1 if a is cytosine
-IsThymine(a)	           a == 24	                      1 if a is thymine
-IsPurine(a)	               a & 55	                      0 if a is a purine
-IsPyrimidine(a)	           a & 199	                      0 if a is a pyrimidine
-DifferentBase(a, b) 	   (a & b) < 16	                  1 if a and b are different surely
-SameBase(a, b)	           KnownBase(a) && a == b	      1 if a and b are the same surely
--------------------------------------------------------------------------------------------
-=#
+    return L
+end
 
 struct fasta_record
     id::String
     description::String
     seq::String
+    n::Int
 end
 
 function get_alignment_dimensions(filepath::AbstractString)
@@ -123,7 +95,7 @@ function read_fasta_alignment(filepath::AbstractString, channel::Channel)
 
     open(filepath, "r") do io
 
-        first = true
+        n = 0
 
         seq_buffer = String("")
         id = String("")
@@ -132,8 +104,9 @@ function read_fasta_alignment(filepath::AbstractString, channel::Channel)
         while !eof(io)
 
             l = readline(io)
+            n += 1
 
-            if first
+            if n == 1
                 if string(l[1]) != ">"
                     throw("badly formed fasta file")
                 end
@@ -147,14 +120,14 @@ function read_fasta_alignment(filepath::AbstractString, channel::Channel)
 
                 seq_buffer = seq_buffer * uppercase(l)
 
-                fr = fasta_record(id, description, seq_buffer)
+                fr = fasta_record(id, description, seq_buffer, n)
                 put!(channel, fr)
 
                 break
 
             elseif string(l[1]) == ">"
 
-                fr = fasta_record(id, description, seq_buffer)
+                fr = fasta_record(id, description, seq_buffer, n)
                 put!(channel, fr)
 
                 description = lstrip(l, '>')
@@ -179,17 +152,18 @@ function populate_byte_array(filepath::AbstractString)
     height = alignment_dim[1]
     width = alignment_dim[2]
 
+    A = Array{UInt8,2}(undef, height, width)
+
     ch = Channel{fasta_record}((channel_arg) -> read_fasta_alignment(filepath, channel_arg))
 
-    A = Array{UInt8,2}(undef, height, width)
 
     j = 1
     for record in ch
         sequence = record.seq
         i = 1
         for nuc in sequence
-            byte = byte_dict[nuc]
-            A[i, j] = byte
+            # byte = byte_dict[nuc]
+            A[i, j] = byte_dict[nuc]
             i+=1
         end
         j+=1

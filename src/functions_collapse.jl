@@ -3,18 +3,26 @@ using Roots
 
 include("functions_align.jl")
 
-# compare sites (rows) until a difference is found, for all pairs of sequences (columns)
-# - break as soon as you know they're different - don't need any more information from this pair
-function is_same(nuc_bit_array)
+# reduced_is_same restricts comparisons to sites that are different
+# from the reference in either sequence being compared.
+# NB this could be changed to the consensus sequence for the alignment to avoid
+# reliance on an another file
+function reduced_is_same(nuc_bit_array, ref_array)
     same_array_size = size(nuc_bit_array, 2)
 
     same_array = trues(same_array_size, same_array_size)
 
     println("number of threads for sequence comparisons: ", Threads.nthreads())
 
+    difference_list = get_list_of_differences(nuc_bit_array, ref_array)
+
     for a in 1:size(nuc_bit_array,2) - 1
+
         for b in (a + 1):size(nuc_bit_array,2)
-            for r in Iterators.reverse(1:size(nuc_bit_array,1))
+
+            start_again = true
+
+            for r in difference_list[a]
                 @inbounds x = nuc_bit_array[r,a]
                 @inbounds y = nuc_bit_array[r,b]
                 different = (x & y) < 16
@@ -23,7 +31,28 @@ function is_same(nuc_bit_array)
                 if different
                     same_array[a,b] = !different
                     same_array[b,a] = !different
+                    start_again = false
                     break
+                end
+            end
+
+            # need to check the second seq's sites too, if we get this far:
+            if start_again
+                for r in difference_list[b]
+                    if r in difference_list[a]
+                        continue
+                    end
+
+                    @inbounds x = nuc_bit_array[r,a]
+                    @inbounds y = nuc_bit_array[r,b]
+                    different = (x & y) < 16
+
+                    # store the different True/False result in an array:
+                    if different
+                        same_array[a,b] = !different
+                        same_array[b,a] = !different
+                        break
+                    end
                 end
             end
         end
@@ -31,6 +60,35 @@ function is_same(nuc_bit_array)
 
     return same_array
 end
+
+# # compare sites (rows) until a difference is found, for all pairs of sequences (columns)
+# # - break as soon as you know they're different - don't need any more information from this pair
+# function is_same(nuc_bit_array)
+#     same_array_size = size(nuc_bit_array, 2)
+#
+#     same_array = trues(same_array_size, same_array_size)
+#
+#     println("number of threads for sequence comparisons: ", Threads.nthreads())
+#
+#     for a in 1:size(nuc_bit_array,2) - 1
+#         for b in (a + 1):size(nuc_bit_array,2)
+#             for r in Iterators.reverse(1:size(nuc_bit_array,1))
+#                 @inbounds x = nuc_bit_array[r,a]
+#                 @inbounds y = nuc_bit_array[r,b]
+#                 different = (x & y) < 16
+#
+#                 # store the different True/False result in an array:
+#                 if different
+#                     same_array[a,b] = !different
+#                     same_array[b,a] = !different
+#                     break
+#                 end
+#             end
+#         end
+#     end
+#
+#     return same_array
+# end
 
 
 # Functions for parallelising
@@ -89,12 +147,12 @@ function get_ranges(n, N_threads)
     return ranges
 end
 
-# A parallel version of is_same()
-function parallel_is_same(nuc_bit_array)
+function parallel_reduced_is_same(nuc_bit_array, ref_array)
+
+    println("number of threads for sequence comparisons: ", Threads.nthreads())
+
     same_array_size = size(nuc_bit_array, 2)
 
-    # initialises as falses so have to change this:
-    # same_array = SharedArray{Bool,2}((same_array_size,same_array_size))
     same_array = Array{Bool,2}(undef, same_array_size, same_array_size)
 
     for i in 1:size(same_array, 2)
@@ -112,15 +170,16 @@ function parallel_is_same(nuc_bit_array)
 
     ranges = get_ranges(size(nuc_bit_array, 2), n_Chunks)
 
-    println("number of threads for sequence comparisons: ", Threads.nthreads())
-    # println("number of chunks: ", length(ranges))
+    difference_list = get_list_of_differences(nuc_bit_array, ref_array)
 
     Threads.@threads for range in ranges
         for a in range[1]:range[2]
             for b in (a + 1):size(nuc_bit_array,2)
-                # comb_test+=1
+
+                start_again = true
                 all_same = true
-                for r in Iterators.reverse(1:size(nuc_bit_array,1))
+
+                for r in difference_list[a]
                     @inbounds x = nuc_bit_array[r,a]
                     @inbounds y = nuc_bit_array[r,b]
                     different = (x & y) < 16
@@ -128,9 +187,30 @@ function parallel_is_same(nuc_bit_array)
                     # store the different True/False result in an array:
                     if different
                         all_same = false
+                        start_again = false
                         break
                     end
                 end
+
+                # need to check the second seq's sites too, if we get this far:
+                if start_again
+                    for r in difference_list[b]
+                        if r in difference_list[a]
+                            continue
+                        end
+
+                        @inbounds x = nuc_bit_array[r,a]
+                        @inbounds y = nuc_bit_array[r,b]
+                        different = (x & y) < 16
+
+                        # store the different True/False result in an array:
+                        if different
+                            all_same = false
+                            break
+                        end
+                    end
+                end
+
                 same_array[a,b] = all_same
                 same_array[b,a] = all_same
             end
@@ -139,6 +219,57 @@ function parallel_is_same(nuc_bit_array)
 
     return same_array
 end
+
+# # A parallel version of is_same()
+# function parallel_is_same(nuc_bit_array)
+#     same_array_size = size(nuc_bit_array, 2)
+#
+#     # initialises as falses so have to change this:
+#     # same_array = SharedArray{Bool,2}((same_array_size,same_array_size))
+#     same_array = Array{Bool,2}(undef, same_array_size, same_array_size)
+#
+#     for i in 1:size(same_array, 2)
+#         same_array[i,i] = true
+#     end
+#
+#     # make as many chunks as we have threads
+#     n_Chunks = Threads.nthreads()
+#
+#     # ...unless we have too many threads for this many sequences, in which case, down-size.
+#     # A chunk size less than or equal to half the total number of sequences makes valid ranges
+#     if n_Chunks > size(nuc_bit_array, 2) / 2
+#         n_Chunks::Int = floor(size(nuc_bit_array, 2) / 2)
+#     end
+#
+#     ranges = get_ranges(size(nuc_bit_array, 2), n_Chunks)
+#
+#     println("number of threads for sequence comparisons: ", Threads.nthreads())
+#     # println("number of chunks: ", length(ranges))
+#
+#     Threads.@threads for range in ranges
+#         for a in range[1]:range[2]
+#             for b in (a + 1):size(nuc_bit_array,2)
+#                 # comb_test+=1
+#                 all_same = true
+#                 for r in Iterators.reverse(1:size(nuc_bit_array,1))
+#                     @inbounds x = nuc_bit_array[r,a]
+#                     @inbounds y = nuc_bit_array[r,b]
+#                     different = (x & y) < 16
+#
+#                     # store the different True/False result in an array:
+#                     if different
+#                         all_same = false
+#                         break
+#                     end
+#                 end
+#                 same_array[a,b] = all_same
+#                 same_array[b,a] = all_same
+#             end
+#         end
+#     end
+#
+#     return same_array
+# end
 
 # end of functions for parallelising
 # ---------------------------
@@ -175,15 +306,59 @@ function check_the_view_is_good(a_bool_array)
     return true
 end
 
-# test all sets for being supersets, and throw them out if they are
-# NB - this is 1/10 of the run time and allocates a lot of memory in total
-function get_subsets(array_of_sets)
+# function is_subset(s1, s2)
+#     test = true
+#     for x in s1
+#         if ! (x in s2)
+#             test = false
+#             break
+#         end
+#     end
+#     return test
+# end
+
+# # test all sets for being supersets, and throw them out if they are
+# # NB - this is 1/10 of the run time and allocates a lot of memory in total
+# function get_subsets(array_of_sets)
+#
+#     A = Array{BitSet,1}()
+#     sizehint!(A, length(array_of_sets))
+#
+#     for i in 1:size(array_of_sets, 1)
+#         valid = true
+#         for j in 1:size(array_of_sets, 1)
+#             if i == j
+#                 continue
+#             end
+#             # if array_of_sets[i] is a superset of comparison set, then break, else push to A
+#             # (note the reverse logic here, because there is no superset function)
+#             if issubset(array_of_sets[j], array_of_sets[i]) && array_of_sets[i] != array_of_sets[j]
+#                 valid = false
+#                 break
+#             end
+#         end
+#
+#         if valid
+#             push!(A, array_of_sets[i])
+#         end
+#     end
+#
+#     return A
+# end
+
+# a parallel version of get_subsets()
+function parallel_get_subsets(array_of_sets)
 
     A = Array{BitSet,1}()
     sizehint!(A, length(array_of_sets))
 
-    for i in 1:size(array_of_sets, 1)
-        valid = true
+    tests = Array{Bool, 1}(undef, length(array_of_sets))
+
+    for i in eachindex(tests)
+        tests[i] = true
+    end
+
+    Threads.@threads for i in 1:size(array_of_sets, 1)
         for j in 1:size(array_of_sets, 1)
             if i == j
                 continue
@@ -191,12 +366,14 @@ function get_subsets(array_of_sets)
             # if array_of_sets[i] is a superset of comparison set, then break, else push to A
             # (note the reverse logic here, because there is no superset function)
             if issubset(array_of_sets[j], array_of_sets[i]) && array_of_sets[i] != array_of_sets[j]
-                valid = false
+                tests[i] = false
                 break
             end
         end
+    end
 
-        if valid
+    for (i, test) in enumerate(tests)
+        if test
             push!(A, array_of_sets[i])
         end
     end
@@ -242,6 +419,8 @@ end
 function get_sets_in_one_go(the_whole_bool_array)
     # returns an array of bitsets which are the sets
 
+    println("number of threads for set comparisons: ", Threads.nthreads())
+
     good_views = []
     bad_views = []
 
@@ -256,7 +435,7 @@ function get_sets_in_one_go(the_whole_bool_array)
     while length(bad_views) > 0
         new_bad_views = []
         for bv in bad_views
-            new_bitsets = get_subsets(get_sets_from_view(bv))
+            new_bitsets = parallel_get_subsets(get_sets_from_view(bv))
             for bitset in new_bitsets
                 set = collect(bitset)
                 new_view = @view the_whole_bool_array[set, set]
@@ -660,7 +839,7 @@ end
 
 function write_tip_to_redundant_seq_relationships(D, filepath, retained)
     # write the converse file to write_redundant_seq_to_tip_relationships()
-    # i.e., tips of the tree and what other seqs they represent
+    # i.e., tips of the tree and what other seqs they represent (if any)
     open(filepath, "w") do io
         println(io, "tip,sequences")
         for (key, value) in D
@@ -668,10 +847,10 @@ function write_tip_to_redundant_seq_relationships(D, filepath, retained)
             value = setdiff(value, retained)
             # and subtract tips
             value = setdiff(value, keys(D))
-            # ignore sequences that represent no other sequences:
-            if length(value) == 0
-                continue
-            end
+            # # ignore sequences that represent no other sequences:
+            # if length(value) == 0
+            #     continue
+            # end
             println(io, key * "," * join(value, "|"))
         end
     close(io)
