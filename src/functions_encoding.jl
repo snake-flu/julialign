@@ -1,3 +1,70 @@
+#=
+See - http://ape-package.ird.fr/misc/BitLevelCodingScheme.html for the bit-level
+coding scheme :
+
+Nucleotide	    IUPAC code	 Bit-level code	  Value
+---------------------------------------------------
+A	                  A	      10001000	       136
+G	                  G	      01001000	        72
+C	                  C	      00101000	        40
+T	                  T	      00011000	        24
+A or G	              R	      11000000	       192
+A or C	              M	      10100000	       160
+A or T	              W	      10010000	       144
+G or C	              S	      01100000	        96
+G or T	              K	      01010000	        80
+C or T	              Y	      00110000	        48
+A or G or C	          V	      11100000	       224
+A or C or T	          H	      10110000	       176
+A or G or T	          D	      11010000	       208
+G or C or T	          B	      01110000	       112
+A or G or C or T      N	      11110000	       240
+Alignment gap        (–)	  00000100	         4
+Unknown character    (?)	  00000010	         2
+---------------------------------------------------
+
+
+This has been adapated (last two rows have changed) to
+allow matches between alignment gaps / ? and any nucleotide:
+
+Nucleotide	    IUPAC code	 Bit-level code	  Value
+---------------------------------------------------
+A	                  A	      10001000	       136
+G	                  G	      01001000	        72
+C	                  C	      00101000	        40
+T	                  T	      00011000	        24
+A or G	              R	      11000000	       192
+A or C	              M	      10100000	       160
+A or T	              W	      10010000	       144
+G or C	              S	      01100000	        96
+G or T	              K	      01010000	        80
+C or T	              Y	      00110000	        48
+A or G or C	          V	      11100000	       224
+A or C or T	          H	      10110000	       176
+A or G or T	          D	      11010000	       208
+G or C or T	          B	      01110000	       112
+A or G or C or T      N	      11110000	       240
+Alignment gap        (–)	  11110100	       244  ###### CHANGED
+Unknown character    (?)	  11110010	       242  ###### CHANGED
+---------------------------------------------------
+
+
+Function	               C code	                      Value returned
+------------------------------------------------------------------------------------------
+KnownBase(a)	           a & 8	                      8 if a is known surely
+IsAdenine(a)	           a == 136	                      1 if a is adenine
+IsGuanine(a)	           a == 72	                      1 if a is guanine
+IsCytosine(a)       	   a == 40	                      1 if a is cytosine
+IsThymine(a)	           a == 24	                      1 if a is thymine
+IsPurine(a)	               a & 55	                      0 if a is a purine
+IsPyrimidine(a)	           a & 199	                      0 if a is a pyrimidine
+DifferentBase(a, b) 	   (a & b) < 16	                  1 if a and b are different surely
+SameBase(a, b)	           KnownBase(a) && a == b	      1 if a and b are the same surely
+-------------------------------------------------------------------------------------------
+=#
+
+
+
 # byte_dict is a map from the Char representation of IUPAC nucleotide
 # codes to uint8 values according to the (modified) bit-level coding scheme
 # for nucleotides developed by Emmanuel Paradis:
