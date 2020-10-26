@@ -1,4 +1,4 @@
-include("functions_encoding.jl")
+# include("functions_encoding.jl")
 
 function read_del_file(file_path)
     # input file is in the format:

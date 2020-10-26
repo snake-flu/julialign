@@ -32,8 +32,7 @@ function main()
 
     dels = read_del_file(parsed_args["dels-file"])
 
-    fasta_IDs = get_fasta_descriptions(parsed_args["infile"])
-    nucleotide_array = populate_byte_array(parsed_args["infile"])
+    nucleotide_array, fasta_IDs = populate_byte_array_get_names(parsed_args["infile"])
 
     if parsed_args["append-as-snp"]
         nucleotide_array_dels, genotypes_table = type_deletions_and_append_as_SNP(nucleotide_array, dels)

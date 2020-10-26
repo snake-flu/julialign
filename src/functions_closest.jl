@@ -110,11 +110,8 @@ function get_SNPs(target_V, query_V)
 end
 
 function closest(target_file, query_file, outfile)
-    T_names = get_fasta_descriptions(target_file)
-    Q_names = get_fasta_descriptions(query_file)
-
-    T_A = populate_byte_array(target_file)
-    Q_A = populate_byte_array(query_file)
+    T_A, T_names = populate_byte_array_get_names(target_file)
+    Q_A, Q_names = populate_byte_array_get_names(query_file)
 
     differences = get_difference_matrix(T_A, Q_A)
 

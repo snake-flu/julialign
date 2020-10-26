@@ -1,7 +1,7 @@
 using StatsBase
 using Roots
 
-include("functions_align.jl")
+# include("functions_align.jl")
 
 # reduced_is_same restricts comparisons to sites that are different
 # from the reference in either sequence being compared.
@@ -419,7 +419,7 @@ end
 function get_sets_in_one_go(the_whole_bool_array)
     # returns an array of bitsets which are the sets
 
-    println("number of threads for set comparisons: ", Threads.nthreads())
+    # println("number of threads for set comparisons: ", Threads.nthreads())
 
     good_views = []
     bad_views = []
@@ -514,7 +514,7 @@ function double_sort_perm(main_vector, secondary_vector;
     return final_order
 end
 
-# score sequences based on the number of sequences
+# score sequences based on the number of other sequences
 # they're different from
 function score_differences(pairwise_identity)
 
@@ -527,9 +527,7 @@ function score_differences(pairwise_identity)
     return different_scores
 end
 
-# This is the new heuristic - use sequences that are maximally different from all
-# other sequences to represent sets. Ties are broken using genome completeness
-function write_most_different_unused_seq(pairwise_identity, final_sets, retained, whole_nuc_bit_array, whole_ID_array, alignment_out, append_IDs)
+function get_output_sets(pairwise_identity, final_sets, retained, whole_nuc_bit_array, whole_ID_array)
 
     completeness_scores = score_alignment(whole_nuc_bit_array)
     difference_scores = score_differences(pairwise_identity)
@@ -557,83 +555,62 @@ function write_most_different_unused_seq(pairwise_identity, final_sets, retained
 
     # initiate a ditionary that we will use as a check for whether a particular sequence
     # has been used (to represent a set) yet
-    used_names = Dict{String, Array{String, 1}}()
+    output_set_dict = Dict{String, Array{String, 1}}()
 
-    open(alignment_out, "w") do io
-        for (i, set) in enumerate(sorted_final_sets)
+    for (i, set) in enumerate(sorted_final_sets)
 
-            # cs is the columns in the alignment that this set represents
-            cs = collect(set)
+        # cs is the columns in the alignment that this set represents
+        cs = collect(set)
 
-            # If it's a singleton it can't have been so we can just get on with things.
-            if length(cs) == 1
+        # If it's a singleton it can't have been so we can just get on with things.
+        if length(cs) == 1
 
-                id = ">" * whole_ID_array[cs[1]]
-                seq = get_seq_from_1D_byte_array(whole_nuc_bit_array[:,cs[1]])
+            output_set_dict[whole_ID_array[cs[1]]] = []
 
-                # write fasta header and sequence:
-                println(io, id)
-                println(io, seq)
+        # otherwise get the most-different-from-all-other-sequences sequence
+        # (breaking ties with genome completeness)
+        else
 
-                used_names[whole_ID_array[cs[1]]] = []
+            set_completeness_scores = completeness_scores[cs]
+            set_difference_scores = difference_scores[cs]
+            set_nuc_array = whole_nuc_bit_array[:,cs]
+            set_IDs = whole_ID_array[cs]
 
-            # otherwise get the most-different-from-all-other-sequences sequence
-            # (breaking ties with genome completeness)
-            else
+            max_indices = double_sort_perm(set_difference_scores, set_completeness_scores,
+                                           main_increasing = false, secondary_increasing = false)
 
-                set_completeness_scores = completeness_scores[cs]
-                set_difference_scores = difference_scores[cs]
-                set_nuc_array = whole_nuc_bit_array[:,cs]
-                set_IDs = whole_ID_array[cs]
+            indx = 1
+            best_column = max_indices[indx]
+            best_ID = set_IDs[best_column]
 
-                max_indices = double_sort_perm(set_difference_scores, set_completeness_scores,
-                                               main_increasing = false, secondary_increasing = false)
-
-                indx = 1
+            # A while loop to check that the highest scoring sequence hasn't
+            # already been used to represent a set - if it has, go through
+            # each next best sequence in turn.
+            while in(best_ID, keys(output_set_dict)) && indx < length(max_indices)
+                indx += 1
                 best_column = max_indices[indx]
                 best_ID = set_IDs[best_column]
-
-                # A while loop to check that the highest scoring sequence hasn't
-                # already been used to represent a set - if it has, go through
-                # each next best sequence in turn.
-                while in(best_ID, keys(used_names)) && indx < length(max_indices)
-                    indx += 1
-                    best_column = max_indices[indx]
-                    best_ID = set_IDs[best_column]
-                end
-
-                # if, after the iteration above, all of the IDs in this set are already
-                # representing sets (are in used_names), then we can just skip this set (because
-                # all its members are assigned to a set anyway).
-                if in(best_ID, keys(used_names))
-                    continue
-                end
-
-                best_seq = set_nuc_array[:,best_column]
-                other_IDs = setdiff(set_IDs, [best_ID])
-
-                used_names[best_ID] = collect(other_IDs)
-
-                if !append_IDs
-                    id = ">" * string(best_ID)
-                else
-                    id = ">" * join(vcat(best_ID, other_IDs), "|")
-                end
-
-                seq = get_seq_from_1D_byte_array(best_seq)
-
-                # write fasta header and sequence:
-                println(io, id)
-                println(io, seq)
-
             end
 
+            # if, after the iteration above, all of the IDs in this set are already
+            # representing sets (are in used_names), then we can just skip this set (because
+            # all its members are assigned to a set anyway).
+            if in(best_ID, keys(output_set_dict))
+                continue
+            end
+
+            best_seq = set_nuc_array[:,best_column]
+            other_IDs = setdiff(set_IDs, [best_ID])
+
+            output_set_dict[best_ID] = collect(other_IDs)
+
         end
+    end
 
     # add retained sequences to the alignment if they aren't included already,
     # and add them to used names so that don't get duplicated in the mapping
     for seqname in retained
-        if !in(seqname, keys(used_names))
+        if !in(seqname, keys(output_set_dict))
 
             indx = findfirst(isequal(seqname), whole_ID_array)
 
@@ -646,151 +623,49 @@ function write_most_different_unused_seq(pairwise_identity, final_sets, retained
                 throw("bad indexing when forced to retain " * seqname)
             end
 
-            id = ">" * whole_ID_array[indx]
-            seq = get_seq_from_1D_byte_array(whole_nuc_bit_array[:,indx])
-
-            println(io, id)
-            println(io, seq)
-
-            used_names[seqname] = []
+            output_set_dict[seqname] = []
         end
     end
 
-    close(io)
-    end
-
-    return used_names
+    return output_set_dict
 end
 
-# # this is the old heuristic, using the most complete genomes to represent sets
-# function write_highest_scoring_unused_seq(final_sets, retained, whole_nuc_bit_array, whole_ID_array, alignment_out, append_IDs)
-#
-#     all_scores = score_alignment(whole_nuc_bit_array)
-#
-#     # convert the set to an Array
-#     final_sets_as_array = collect(final_sets)
-#
-#     # split up singletons and others to relieve the burden on sorting?
-#     singletons = Array{BitSet,1}()
-#     non_single = Array{BitSet,1}()
-#
-#     for set in final_sets_as_array
-#         if length(set) == 1
-#             push!(singletons, set)
-#         else
-#             push!(non_single, set)
-#         end
-#     end
-#
-#     # sort non-singletons by length in increasing order
-#     sort!(non_single, by = length)
-#
-#     # and here are singletons + sorted longer sets, concatenated together
-#     sorted_final_sets = vcat(singletons, non_single)
-#
-#     # initiate a ditionary that we will use as a check for whether a particular sequence
-#     # has been used (to represent a set) yet
-#     used_names = Dict{String, Array{String, 1}}()
-#
-#     open(alignment_out, "w") do io
-#         for (i, set) in enumerate(sorted_final_sets)
-#
-#             # cs is the columns in the alignment that this set represents
-#             cs = collect(set)
-#
-#             # If it's a singleton it can't have been so we can just get on with things.
-#             if length(cs) == 1
-#
-#                 id = ">" * whole_ID_array[cs[1]]
-#                 seq = get_seq_from_1D_byte_array(whole_nuc_bit_array[:,cs[1]])
-#
-#                 # write fasta header and sequence:
-#                 println(io, id)
-#                 println(io, seq)
-#
-#                 used_names[whole_ID_array[cs[1]]] = []
-#
-#             # otherwise get the highest scoring sequence
-#             else
-#
-#                 set_scores = all_scores[cs]
-#                 set_nuc_array = whole_nuc_bit_array[:,cs]
-#                 set_IDs = whole_ID_array[cs]
-#
-#                 max_indices = sortperm(set_scores, rev = true)
-#
-#                 indx = 1
-#                 best_column = max_indices[indx]
-#                 best_ID = set_IDs[best_column]
-#
-#                 # A while loop to check that the highest scoring sequence hasn't
-#                 # already been used to represent a set - if it has, go through
-#                 # each next best sequence in turn.
-#                 while in(best_ID, keys(used_names)) && indx < length(max_indices)
-#                     indx += 1
-#                     best_column = max_indices[indx]
-#                     best_ID = set_IDs[best_column]
-#                 end
-#
-#                 # if, after the iteration above, all of the IDs in this set are already
-#                 # representing sets (are in used_names), then we can just skip this set (because
-#                 # all it's members are assigned to a set anyway).
-#                 if in(best_ID, keys(used_names))
-#                     continue
-#                 end
-#
-#                 best_seq = set_nuc_array[:,best_column]
-#                 other_IDs = setdiff(set_IDs, [best_ID])
-#
-#                 used_names[best_ID] = collect(other_IDs)
-#
-#                 if !append_IDs
-#                     id = ">" * string(best_ID)
-#                 else
-#                     id = ">" * join(vcat(best_ID, other_IDs), "|")
-#                 end
-#
-#                 seq = get_seq_from_1D_byte_array(best_seq)
-#
-#                 # write fasta header and sequence:
-#                 println(io, id)
-#                 println(io, seq)
-#
-#             end
-#
-#         end
-#
-#     # add retained sequences to the alignment if they aren't included already,
-#     # and add them to used names so that don't get duplicated in the mapping
-#     for seqname in retained
-#         if !in(seqname, keys(used_names))
-#
-#             indx = findfirst(isequal(seqname), whole_ID_array)
-#
-#             if indx == nothing
-#                 println(stderr, "warning: " * seqname * " can't be retained because it isn't in the input alignment")
-#                 continue
-#             end
-#
-#             if seqname != whole_ID_array[indx]
-#                 throw("bad indexing when forced to retain " * seqname)
-#             end
-#
-#             id = ">" * whole_ID_array[indx]
-#             seq = get_seq_from_1D_byte_array(whole_nuc_bit_array[:,indx])
-#
-#             println(io, id)
-#             println(io, seq)
-#
-#             used_names[seqname] = []
-#         end
-#     end
-#
-#     close(io)
-#     end
-#
-#     return used_names
-# end
+function get_id_to_column_dict(ID_array)
+    ID_to_cl_dict = Dict{String, Int}()
+    for (i, ID) in enumerate(ID_array)
+        ID_to_cl_dict[ID] = i
+    end
+
+    return ID_to_cl_dict
+end
+
+function write_fasta(output_set_dict, whole_nuc_bit_array, whole_ID_array, alignment_out, append_IDs)
+
+    ID_to_cl_dict = get_id_to_column_dict(whole_ID_array)
+
+    open(alignment_out, "w") do io
+
+        for tip in keys(output_set_dict)
+
+            clm = ID_to_cl_dict[tip]
+
+            if !append_IDs
+                id = ">" * string(tip)
+            else
+                id = ">" * join(vcat(tip, output_set_dict[tip]), "|")
+            end
+
+            seq = get_seq_from_1D_byte_array(whole_nuc_bit_array[:,clm])
+
+            # write fasta header and sequence:
+            println(io, id)
+            println(io, seq)
+
+        end
+
+        close(io)
+    end
+end
 
 function get_redundant_seq_to_tip_relationships(representative_to_set)
     #= representative_to_set is a dict with representative
@@ -841,18 +716,32 @@ function write_tip_to_redundant_seq_relationships(D, filepath, retained)
     # write the converse file to write_redundant_seq_to_tip_relationships()
     # i.e., tips of the tree and what other seqs they represent (if any)
     open(filepath, "w") do io
-        println(io, "tip,sequences")
+        print(io, "tip,sequences")
         for (key, value) in D
             # subtract retained sequences from the set that is represented
-            value = setdiff(value, retained)
-            # and subtract tips
-            value = setdiff(value, keys(D))
-            # # ignore sequences that represent no other sequences:
-            # if length(value) == 0
-            #     continue
-            # end
-            println(io, key * "," * join(value, "|"))
+
+            print(io, "\n")
+            print(io, key * ",")
+
+            first = true
+            for v in value
+                # if this seq is in the vector of retained tips, skip
+                if v in retained
+                    continue
+                end
+                # if this seq is a tip itself, skip
+                if v in keys(D)
+                    continue
+                end
+                if first
+                    print(io, v)
+                    first = false
+                    continue
+                end
+                print(io, "|" * v)
+            end
         end
+        print(io, "\n")
     close(io)
     end
 end

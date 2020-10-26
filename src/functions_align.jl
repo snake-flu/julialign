@@ -1,5 +1,16 @@
 include("functions_encoding.jl")
 
+struct FastaRecord
+    id::Array{UInt8, 1}
+    description::Array{UInt8, 1}
+    seq::Array{UInt8, 1}
+end
+
+struct fasta_record
+    id::String
+    description::String
+    seq::String
+end
 
 # get_index_of_diff_sites returns an array of integers which are the sites
 # at which two vectors of bit-level encoded nucleotides differ
@@ -22,7 +33,6 @@ function get_index_of_diff_sites(nuc_bit_V_A, nuc_bit_V_B)
     return A
 end
 
-
 # get_list_of_differences applies get_index_of_diff_sites between nuc_bit_V_A
 # and every sequence stored in nuc_bit_array
 function get_list_of_differences(nuc_bit_array, nuc_bit_V_A)
@@ -36,11 +46,27 @@ function get_list_of_differences(nuc_bit_array, nuc_bit_V_A)
     return L
 end
 
-struct fasta_record
-    id::String
-    description::String
-    seq::String
-    n::Int
+function readlinebyte(s::IO)::Vector{UInt8}
+    line = readuntil(s, 0x0a, keep=true)
+    i = length(line)
+    if i == 0 || line[i] != 0x0a
+        return line
+    elseif i < 2 || line[i-1] != 0x0d
+        return line[1:length(line) - 1]
+    else
+        return line[1:length(line) - 2]
+    end
+end
+
+function readuntilspace(V::Vector{UInt8})::Vector{UInt8}
+    N = Vector{UInt8}()
+    for c in V
+        if c == 0x20
+            return N
+        end
+        push!(N, c)
+    end
+    return N
 end
 
 function get_alignment_dimensions(filepath::AbstractString)
@@ -56,13 +82,13 @@ function get_alignment_dimensions(filepath::AbstractString)
                 first = false
             end
 
-            line = readline(io)
+            line = readlinebyte(io)
 
-            if string(line[1]) == ">"
+            if line[1] == 0x3e # '>'
                 n+=1
             end
 
-            if first && string(line[1]) != ">"
+            if first && line[1] != 0x3e # '>'
                 l+=length(line)
             end
         end
@@ -91,6 +117,42 @@ function get_fasta_descriptions(filepath::AbstractString)
     return A
 end
 
+function read_fasta_alignment_bytes(filename, channel::Channel)
+    open(filename, "r") do io
+
+        firstHeader = true
+        seqbuffer = IOBuffer()
+        description = Vector{UInt8}
+        id = Vector{UInt8}
+
+        while !eof(io)
+
+            L = readlinebyte(io)
+
+            if firstHeader
+                description = L[2:length(L)]
+                id = readuntilspace(description)
+                firstHeader = false
+
+            elseif L[1] == 0x3e # '>'
+
+                FR = FastaRecord(id, description, take!(seqbuffer))
+                put!(channel, FR)
+
+                description = L[2:length(L)]
+                id = readuntilspace(description)
+
+            else
+                write(seqbuffer, L)
+            end
+        end
+
+        FR = FastaRecord(id, description, take!(seqbuffer))
+        put!(channel, FR)
+
+    end
+end
+
 function read_fasta_alignment(filepath::AbstractString, channel::Channel)
 
     open(filepath, "r") do io
@@ -108,7 +170,8 @@ function read_fasta_alignment(filepath::AbstractString, channel::Channel)
 
             if n == 1
                 if string(l[1]) != ">"
-                    throw("badly formed fasta file")
+                    e = error("badly formed fasta file")
+                    throw(e)
                 end
 
                 description = lstrip(l, '>')
@@ -120,14 +183,14 @@ function read_fasta_alignment(filepath::AbstractString, channel::Channel)
 
                 seq_buffer = seq_buffer * uppercase(l)
 
-                fr = fasta_record(id, description, seq_buffer, n)
+                fr = fasta_record(id, description, seq_buffer)
                 put!(channel, fr)
 
                 break
 
             elseif string(l[1]) == ">"
 
-                fr = fasta_record(id, description, seq_buffer, n)
+                fr = fasta_record(id, description, seq_buffer)
                 put!(channel, fr)
 
                 description = lstrip(l, '>')
@@ -145,8 +208,8 @@ function read_fasta_alignment(filepath::AbstractString, channel::Channel)
     end
 end
 
-function populate_byte_array(filepath::AbstractString)
-    byte_dict = make_byte_dict()
+function populate_byte_array_get_names(filepath::AbstractString)
+    byte_2_byte = make_byte_array()
 
     alignment_dim = get_alignment_dimensions(filepath)
     height = alignment_dim[1]
@@ -154,22 +217,28 @@ function populate_byte_array(filepath::AbstractString)
 
     A = Array{UInt8,2}(undef, height, width)
 
-    ch = Channel{fasta_record}((channel_arg) -> read_fasta_alignment(filepath, channel_arg))
+    ids = Array{String,1}(undef, width)
 
+    ch = Channel{FastaRecord}((channel_arg) -> read_fasta_alignment_bytes(filepath, channel_arg))
 
     j = 1
     for record in ch
-        sequence = record.seq
+        ids[j] = String(record.id)
         i = 1
-        for nuc in sequence
-            # byte = byte_dict[nuc]
-            A[i, j] = byte_dict[nuc]
+        for nuc in record.seq
+            if byte_2_byte[nuc] == 0
+                e = error("unknown nucleotide in alignment: ", Char(nuc))
+                throw(e)
+            end
+            @inbounds A[i, j] = byte_2_byte[nuc]
+            # A[i, j] = byte_dict[nuc]
             i+=1
         end
+
         j+=1
     end
 
-    return A
+    return A, ids
 end
 
 function get_seq_from_1D_byte_array(byte_V)
