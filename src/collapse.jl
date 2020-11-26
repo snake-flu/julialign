@@ -181,6 +181,11 @@ function main()
     ref_array, ref_id = populate_byte_array_get_names(parsed_args["reference"])
     nucleotide_array, fasta_IDs = populate_byte_array_get_names(parsed_args["infile"])
 
+    if length(fasta_IDs) != length(Set(fasta_IDs))
+        e = error("duplicate IDs in input fasta")
+        throw(e)
+    end
+
     if length(ref_array) != size(nucleotide_array, 1)
         e = error("reference and alignment do not have the same number of sites")
         throw(e)
@@ -200,6 +205,7 @@ function main()
 
     else
 
+        println("number of threads for sequence comparisons: ", Threads.nthreads())
         vanilla(parsed_args, ref_array, nucleotide_array, fasta_IDs)
 
     end

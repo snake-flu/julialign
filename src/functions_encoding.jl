@@ -91,6 +91,16 @@ function make_byte_dict()
     return byte_dict
 end
 
+#=
+byte_array is a map from the byte/uint8 representation of IUPAC characters
+as they would appear in ASCII text (e.g. a fasta file) to the E. Paradis
+bit-level coding scheme. E.g. 'A', whose byte value is 65, is element 65
+in the array below, which maps to '0x88'/136/10001000 - which is the encoding
+for A, and so on for the other nucleotides. The highest value is Y, which is 89
+(and encodes 0x30 - 48/00110000). This makes for faster look up than converting
+the file from bytes to strings/chars then looking up the corresponding byte
+in a dict.
+=#
 function make_byte_array()
     byte_array = [0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, #10
                   0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00, #20
@@ -127,6 +137,41 @@ function make_nuc_dict()
     return nuc_dict
 end
 
+function make_score_array()
+    A = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, #20
+         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, #40
+         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, #60
+         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, #80
+         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, #100
+         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, #120
+         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, #140
+         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, #160
+         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, #180
+         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, #200
+         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, #220
+         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, #240
+         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0] #260
+
+    A[136] = 12
+    A[72] = 12
+    A[40] = 12
+    A[24] = 12
+    A[192] = 6
+    A[160] = 6
+    A[144] = 6
+    A[96] = 6
+    A[80] = 6
+    A[48] = 6
+    A[224] = 4
+    A[176] = 4
+    A[208] = 4
+    A[112] = 4
+    A[240] = 3
+    A[244] = 3
+    A[242] = 3
+
+    return A
+end
 
 # score_dict is a map from uint8 values for IUPAC nucleotide codes to an
 # integer for how unambiguous they are. The score is caculated as:

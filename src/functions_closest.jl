@@ -7,10 +7,10 @@ function get_difference_matrix(target_A, query_A)
 
     difference_array = Array{Float64,2}(undef, size(target_A, 2), size(query_A, 2))
 
-    for query_index in 1:size(query_A, 2)
+    Threads.@threads for query_index in 1:size(query_A, 2)
         for target_index in 1:size(target_A, 2)
-            differences = 0.0
-            denominator = 0.0
+            differences = 0
+            denominator = 0
             for r in 1:size(target_A, 1)
 
                 @inbounds x = target_A[r,target_index]
@@ -20,16 +20,61 @@ function get_difference_matrix(target_A, query_A)
                 same = (x & 8 == 8) && x == y
 
                 if different
-                    differences += 1.0
+                    differences += 1
                 end
 
                 if different || same
-                    denominator += 1.0
+                    denominator += 1
                 end
             end
 
-            difference_array[target_index, query_index] = (differences / denominator)
+            difference_array[target_index, query_index] = convert(AbstractFloat, differences) / convert(AbstractFloat, denominator)
 
+        end
+    end
+
+    return difference_array
+end
+
+function get_SNP_distance_matrix(target_A, query_A, ref_A)
+    difference_array = Array{Int64,2}(undef, size(target_A, 2), size(query_A, 2))
+
+    query_difference_list = get_list_of_differences(query_A, ref_A)
+    target_difference_list = get_list_of_differences(target_A, ref_A)
+
+    Threads.@threads for query_index in 1:size(query_A, 2)
+        for target_index in 1:size(target_A, 2)
+            differences = 0
+            for r in query_difference_list[query_index]
+
+                @inbounds x = target_A[r,target_index]
+                @inbounds y = query_A[r,query_index]
+
+                different = (x & y) < 16
+
+                if different
+                    differences += 1
+                end
+
+            end
+
+            for r in target_difference_list[target_index]
+                if r in query_difference_list[query_index]
+                    continue
+                end
+
+                @inbounds x = target_A[r,target_index]
+                @inbounds y = query_A[r,query_index]
+
+                different = (x & y) < 16
+
+                if different
+                    differences += 1
+                end
+
+            end
+
+            difference_array[target_index, query_index] = differences
         end
     end
 
@@ -106,20 +151,20 @@ function get_SNPs(target_V, query_V)
         end
     end
 
-    return join(SNPs, ";")
+    return join(SNPs, "|")
 end
 
 function closest(target_file, query_file, outfile)
-    T_A, T_names = populate_byte_array_get_names(target_file)
-    Q_A, Q_names = populate_byte_array_get_names(query_file)
+    @time T_A, T_names = populate_byte_array_get_names(target_file)
+    @time Q_A, Q_names = populate_byte_array_get_names(query_file)
 
-    differences = get_difference_matrix(T_A, Q_A)
+    @time differences = get_difference_matrix(T_A, Q_A)
 
-    target_completeness = score_alignment(T_A)
+    @time target_completeness = score_alignment2(T_A)
 
-    open(outfile, "w") do io
+    @time open(outfile, "w") do io
 
-        println(io, "query,target,distance,SNPs")
+        println(io, "query,closest,distance,SNPs")
 
         for query_index in 1:size(differences, 2)
             best_indx = get_best_target_index(differences[:,query_index], target_completeness)
@@ -131,5 +176,29 @@ function closest(target_file, query_file, outfile)
             println(io, Q_name * "," * T_name * "," * string(round(distance, digits = 9)) * "," * SNPs)
         end
     end
+end
 
+function fast_closest(target_file, query_file, ref_file, outfile)
+    R_A, R_names = populate_byte_array_get_names(ref_file)
+    @time T_A, T_names = populate_byte_array_get_names(target_file)
+    @time Q_A, Q_names = populate_byte_array_get_names(query_file)
+
+    @time differences = get_SNP_distance_matrix(T_A, Q_A, R_A)
+
+    @time target_completeness = score_alignment2(T_A)
+
+    @time open(outfile, "w") do io
+
+        println(io, "query,closest,SNP_distance,SNPs")
+
+        for query_index in 1:size(differences, 2)
+            best_indx = get_best_target_index(differences[:,query_index], target_completeness)
+            distance = differences[best_indx, query_index]
+            SNPs = get_SNPs(Q_A[:,query_index], T_A[:,best_indx])
+            Q_name = Q_names[query_index]
+            T_name = T_names[best_indx]
+
+            println(io, Q_name * "," * T_name * "," * string(distance) * "," * SNPs)
+        end
+    end
 end

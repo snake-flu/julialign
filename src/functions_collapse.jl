@@ -12,8 +12,6 @@ function reduced_is_same(nuc_bit_array, ref_array)
 
     same_array = trues(same_array_size, same_array_size)
 
-    println("number of threads for sequence comparisons: ", Threads.nthreads())
-
     difference_list = get_list_of_differences(nuc_bit_array, ref_array)
 
     for a in 1:size(nuc_bit_array,2) - 1
@@ -148,8 +146,6 @@ function get_ranges(n, N_threads)
 end
 
 function parallel_reduced_is_same(nuc_bit_array, ref_array)
-
-    println("number of threads for sequence comparisons: ", Threads.nthreads())
 
     same_array_size = size(nuc_bit_array, 2)
 
@@ -529,7 +525,7 @@ end
 
 function get_output_sets(pairwise_identity, final_sets, retained, whole_nuc_bit_array, whole_ID_array)
 
-    completeness_scores = score_alignment(whole_nuc_bit_array)
+    completeness_scores = score_alignment2(whole_nuc_bit_array)
     difference_scores = score_differences(pairwise_identity)
 
     # convert the set to an Array

@@ -222,7 +222,7 @@ function populate_byte_array_get_names(filepath::AbstractString)
     ch = Channel{FastaRecord}((channel_arg) -> read_fasta_alignment_bytes(filepath, channel_arg))
 
     j = 1
-    for record in ch
+    @inbounds for record in ch
         ids[j] = String(record.id)
         i = 1
         for nuc in record.seq
@@ -230,7 +230,7 @@ function populate_byte_array_get_names(filepath::AbstractString)
                 e = error("unknown nucleotide in alignment: ", Char(nuc))
                 throw(e)
             end
-            @inbounds A[i, j] = byte_2_byte[nuc]
+            A[i, j] = byte_2_byte[nuc]
             # A[i, j] = byte_dict[nuc]
             i+=1
         end
@@ -253,22 +253,44 @@ function get_seq_from_1D_byte_array(byte_V)
     return join(char_V)
 end
 
-function score_alignment_column(nuc_bit_sequence)
-    score_dict = make_score_dict()
+# function score_alignment_column(nuc_bit_sequence)
+#     score_dict = make_score_dict()
+#
+#     score = 0::Int64
+#     for nuc in nuc_bit_sequence
+#         score+=score_dict[nuc]
+#     end
+#     return score
+# end
+#
+# # TODO: parallelise this (should be easy - but needs testing)
+# function score_alignment(nuc_bit_array)
+#
+#     A = fill(0::Int64, size(nuc_bit_array, 2))
+#
+#     for i in 1:size(nuc_bit_array, 2)
+#         A[i] = score_alignment_column(view(nuc_bit_array, :, i))
+#     end
+#
+#     return A
+# end
+
+function score_alignment_column2(nuc_bit_sequence)
+    score_array = make_score_array()
 
     score = 0::Int64
     for nuc in nuc_bit_sequence
-        score+=score_dict[nuc]
+        score+=score_array[nuc]
     end
     return score
 end
 
-function score_alignment(nuc_bit_array)
+function score_alignment2(nuc_bit_array)
 
     A = fill(0::Int64, size(nuc_bit_array, 2))
 
-    for i in 1:size(nuc_bit_array, 2)
-        A[i] = score_alignment_column(view(nuc_bit_array, :, i))
+    Threads.@threads for i in 1:size(nuc_bit_array, 2)
+        A[i] = score_alignment_column2(view(nuc_bit_array, :, i))
     end
 
     return A
