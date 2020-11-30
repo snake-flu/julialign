@@ -221,7 +221,7 @@ test_score_alignment()
 ----------------- closest test --------------------
 =#
 
-function test_closest()
+function test_closest_full()
 
     tests = Vector{Bool}()
 
@@ -231,24 +231,21 @@ function test_closest()
 
     target_completeness = score_alignment2(T_A)
 
-    test_target_completeness = target_completeness == [36, 30, 36, 30, 27]
-    push!(tests, test_target_completeness)
-
     distance = get_difference_matrix(T_A, Q_A)
-    test_distance = distance == reshape([0.0/3.0, 0.0/2.0, 1.0/3.0, 1.0/2.0, 0.0/2.0,
-                                         0.0/3.0, 0.0/2.0, 1.0/3.0, 1.0/2.0, 0.0/2.0,
-                                         1.0/1.0, 1.0/1.0, 1.0/1.0, 1.0/1.0, 1.0/1.0], 5, 3)
-    push!(tests, test_distance)
+    # test_distance = distance == reshape([0.0/3.0, 0.0/2.0, 1.0/3.0, 1.0/2.0, 0.0/2.0,
+    #                                      0.0/3.0, 0.0/2.0, 1.0/3.0, 1.0/2.0, 0.0/2.0,
+    #                                      1.0/1.0, 1.0/1.0, 1.0/1.0, 1.0/1.0, 1.0/1.0], 5, 3)
+    # push!(tests, test_distance)
+    #
+    # SNP_distance = get_SNP_distance_matrix(T_A, Q_A, R_A)
+    # test_SNP_distance = SNP_distance == reshape([0, 0, 1, 1, 0,
+    #                                              0, 0, 1, 1, 0,
+    #                                              1, 1, 1, 1, 1], 5, 3)
+    # push!(tests, test_SNP_distance)
 
-    SNP_distance = get_SNP_distance_matrix(T_A, Q_A, R_A)
-    test_SNP_distance = SNP_distance == reshape([0, 0, 1, 1, 0,
-                                                 0, 0, 1, 1, 0,
-                                                 1, 1, 1, 1, 1], 5, 3)
-    push!(tests, test_SNP_distance)
-
-    best_indices_distance = [1, 1, 1]
-    best_targets_distance = ["target1", "target1", "target1"]
-    best_SNPs_distance = ["", "", "3AG"]
+    best_indices_distance = [1, 2, 3, 1]
+    best_targets_distance = ["target1", "target2", "target3", "target1"]
+    best_SNPs_distance = ["", "", "", "20AG"]
 
     for query_index in 1:size(distance, 2)
         best_indx = get_best_target_index(distance[:,query_index], target_completeness)
@@ -263,27 +260,10 @@ function test_closest()
         push!(tests, T_name == best_targets_distance[best_indx])
     end
 
-    best_indices_SNPs = [1, 1, 1]
-    best_targets_SNPs = ["target1", "target1", "target1"]
-    best_SNPs_SNPs = ["", "", "3AG"]
-
-    for query_index in 1:size(distance, 2)
-        best_indx = get_best_target_index(SNP_distance[:,query_index], target_completeness)
-        push!(tests, best_indx == best_indices_SNPs[query_index])
-
-        SNPs = get_SNPs(Q_A[:,query_index], T_A[:,best_indx])
-        push!(tests, SNPs == best_SNPs_SNPs[query_index])
-
-        Q_name = Q_names[query_index]
-
-        T_name = T_names[best_indx]
-        push!(tests, T_name == best_targets_SNPs[best_indx])
-    end
-
-    println("test_closest() passes test: " * string(all(tests)))
+    println("test_closest_full() passes test: " * string(all(tests)))
 end
 
-test_closest()
+test_closest_full()
 
 
 
