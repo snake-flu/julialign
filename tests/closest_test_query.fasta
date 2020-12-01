@@ -1,0 +1,8 @@
+>query1 should match target 1
+ACTGACTGACTGACTGACTG
+>query2 should match target 2
+ACTGACTGACTGACTGACTT
+>query3 should match target 3
+ACTGACTGACTGACTGACTC
+>query3 should match target 1
+ACTGACTGACTGACTGACTA
