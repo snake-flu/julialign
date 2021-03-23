@@ -65,7 +65,7 @@ function m_n_reduced_is_same(nuc_bit_array_A, nuc_bit_array_B, ref_array)
 end
 
 function read_relationships(filepath)
-    # filepath should point to a tips_2_redundants.csv format file
+    # filepath should point to a tip_2_redundants.csv format file
 
     all_seqs = Array{String,1}()
     sets = Dict{String, Array{String, 1}}()
@@ -106,7 +106,186 @@ function read_relationships(filepath)
 
     all_seqs = Set(all_seqs)
 
-    return(sets, all_seqs)
+    return sets, all_seqs
+end
+
+function update_relationships_based_on_appearance(sets, all_seqs, fasta_IDs)
+    #=
+    sets = a dict of string(tip):array of strings(redundants)
+    all_seqs = a set of strings (all the sequences from the relationships file)
+    fasta_IDs = an array of strings which are the IDs for all the seqs in the fasta file
+
+    A function to update the relationships that have been read in from the
+    previous "tip_to_redundants.csv" file, to deal with the case where sequences
+    that were in the previous dataset are missing in the new dataset.
+
+    The following things should happen:
+
+    1) for sets with tips that are not in the new dataset, a new tip should be chosen
+       from within that set. If this is the case this redundant also needs to be removed
+       from any other sets where it is a redundant (as would happen in the full routine).
+       If the set has no other sequences, it can be thrown out.
+    2) for sets with redundants that are not in the new dataset, those redundants
+       should be stripped out of the sets.
+    =#
+
+    # make a set of the fasta IDs for faster lookup
+    fasta_ID_set = Set(fasta_IDs)
+
+    # sets whose tips is missing in these data. will check that all their
+    # redundants are not redundants in sets_that_dont_need_new_tips already
+    # (unchanged from the input data), because if so, can throw out this
+    # whole set
+    sets_that_need_new_tips = Dict{String, Array{String, 1}}()
+    sets_that_dont_need_new_tips = Dict{String, Array{String, 1}}()
+
+    # make a set of redundants that have become tips and therefore need to be taken
+    # out of any other sets that they are in.
+
+    # step 1: sort out sets that need new tips (or could potentially be thrown away)
+    for (key, value) in sets
+        # if this key doesn't exist any more
+        if !(key in fasta_ID_set)
+            # there are any redundants, flag for followup (else ignore)
+            if length(value) >= 1
+                sets_that_need_new_tips[key] = value
+            end
+        else
+            sets_that_dont_need_new_tips[key] = value
+        end
+    end
+
+    # step 2:
+    # a) get the set of all the redundant seqs in the unchanged data:
+    # make a set of the current redundants for faster lookup
+    unchanged_set_seqs = Set{String}()
+    for (key, value) in sets_that_dont_need_new_tips
+        for v in value
+            if v in fasta_ID_set
+                push!(unchanged_set_seqs, v)
+            end
+        end
+    end
+
+    # b) find new tips for sets whose tip is missing, or throw them out if
+    # they're already represented
+    redundants_that_are_now_tips = Set{String}()
+    sets_with_new_tips = Dict{String, Array{String, 1}}()
+    for (key, value) in sets_that_need_new_tips
+        # key doesn't exist in the new dataset
+        for v in value
+            # v might not:
+            if !(v in fasta_ID_set)
+                continue
+            # or it might already be represented elsewhere:
+            elseif v in unchanged_set_seqs
+                continue
+            # otherwise just
+            else
+                sets_with_new_tips[v] = setdiff(value, v)
+                push!(redundants_that_are_now_tips, v)
+                break
+            end
+        end
+    end
+
+    # step 3: merge the unchanged and the new sets
+    new_sets_temp = Dict{String, Array{String, 1}}()
+
+    for (key, value) in sets_with_new_tips
+        new_sets_temp[key] = value
+    end
+
+    for (key, value) in sets_that_dont_need_new_tips
+        new_sets_temp[key] = value
+    end
+
+    # step 4: remove redundants that are missing or have become tips
+    # and populate the new set of old seqs at the same time. ???
+
+    new_sets = Dict{String, Array{String, 1}}()
+    new_all_seqs = Set{String}()
+
+    for (key, value) in new_sets_temp
+        push!(new_all_seqs, key)
+
+        newredundants = Array{String, 1}()
+        for redundant in value
+            if !(redundant in redundants_that_are_now_tips)
+                if redundant in fasta_ID_set
+                    push!(newredundants, redundant)
+                    push!(new_all_seqs, redundant)
+                end
+            end
+        end
+
+        new_sets[key] = newredundants
+    end
+
+    return new_sets, new_all_seqs
+end
+
+function update_relationships_based_on_sequences(sets, all_seqs, nucleotide_array, fasta_IDs, ref_array)
+    #=
+    sets = a dict of string(tip):array of strings(redundants)
+    all_seqs = a set of strings (all the sequences from the relationships file)
+    nucleotide_array = the alignment
+    fasta_IDs = an array of strings which are the IDs for all the seqs in the fasta file
+
+    A function to update the relationships that have been read in from the
+    previous "tip_to_redundants.csv" file, to deal with the case where sequences
+    that were in the previous dataset are different in the new dataset (the only
+    way you can tell is by testing the previous sets for still being good sets).
+
+    check that the sets are still good sets. TODO im not sure how to deal with the situation
+    where they are not. bad apples (sequences) can be pushed into the new set, which means that
+    they will get reassigned additively, but im not sure how to identify the bad apples in
+    the first place. I could throw the whole set out. - this might be easiest?
+    =#
+
+    # need to subset the nucleotide array, so need to know what columns to use:
+    ID_to_column_dict = get_id_to_column_dict(fasta_IDs) # returns a dict fasta IDs to their column in the alignment
+
+    new_sets = Dict{String, Array{String, 1}}()
+    new_all_seqs = Set{String}()
+
+    for (key, value) in sets
+        # an array containing all the seq names for this set:
+        IDs = Array{String, 1}()
+        push!(IDs, key)
+        for v in value
+            push!(IDs, v)
+        end
+
+        # an array containing all the column numbers for this set:
+        colmns = Array{Int32, 1}()
+        for ID in IDs
+            push!(colmns, ID_to_column_dict[ID])
+        end
+
+        # now check the set:
+        same_array = reduced_is_same(view(nucleotide_array, :, colmns), ref_array) # returns the same_array
+
+        set_is_good = check_the_view_is_good(same_array) # returns true/false the same_array is ok
+
+        if set_is_good
+            # if the set is still fine, we can keep it
+            new_sets[key] = value
+
+            # and we add its members to the set of all sequences
+            push!(new_all_seqs, key)
+            for v in value
+                push!(new_all_seqs, v)
+            end
+        else
+            # Otherwise, we don't keep it. But we don't need to strip its members from other sets,
+            # because they will be tested anyway...
+            continue
+        end
+
+    end
+
+    return new_sets, new_all_seqs
 end
 
 #
@@ -253,6 +432,37 @@ function assign_new_seqs(m_n_pairwise_identity, unplaced_pairwise_identity, old_
 
     return updated_sets, unplaced_new_tip_indices
 end
+
+function TEST_get_dict_levels(relationships_dict)
+    s = Set{String}()
+    for (key, value) in relationships_dict
+        push!(s, key)
+        for v in value
+            push!(s, v)
+        end
+    end
+    return s
+end
+
+function TEST_get_sets_from_relationships(fasta_IDs, relationships_dict)
+
+    col_dict = get_id_to_column_dict(fasta_IDs)
+
+    A = Array{BitSet,1}()
+
+    for (key, value) in relationships_dict
+        temp_A = BitSet()
+        push!(temp_A, col_dict[key])
+        for v in value
+            push!(temp_A, col_dict[v])
+        end
+        
+        push!(A, temp_A)
+    end
+
+    return A
+end
+
 #
 # function assign_new_seqs(old_nuc_bit_array, new_nuc_bit_array, old_IDs, new_IDs, old_sets, ref_array)
 #

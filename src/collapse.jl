@@ -89,12 +89,26 @@ end
 
 function additive(parsed_args, ref_array, nucleotide_array, fasta_IDs)
 
-    old_sets, old_ID_list = read_relationships(parsed_args["additive"])
+    println("number of sequences in input dataset: ", length(fasta_IDs))
+
+    old_sets_temp1, old_ID_list_temp1 = read_relationships(parsed_args["additive"])
+
+    # should be a function here to rejig the previous relationships to deal with
+    # the case where tips that were in the old dataset are missing in the new one
+    old_sets_temp2, old_ID_list_temp2 = update_relationships_based_on_appearance(old_sets_temp1, old_ID_list_temp1, fasta_IDs)
+
+    # Should also probably deal with the potentiality of the sequences (with the same ID)
+    # changing from one iteration of the dataset to the next. The test could be the within-sets
+    # test of all the old sets, and any sequences that break it could be treated like new sequences.
+    # UPDATE: broken sets are thrown out and their sequences will end up in the new ID list:
+    old_sets, old_ID_list = update_relationships_based_on_sequences(old_sets_temp2, old_ID_list_temp2, nucleotide_array, fasta_IDs, ref_array)
 
     old_array, new_array, old_IDs, new_IDs = split_data(nucleotide_array, fasta_IDs, old_ID_list)
 
     # println("additive mode, number of new sequences to add: ", length(new_IDs))
 
+    # TODO: don't throw an error here - just return the original alignment (minus)
+    # any missing seqs + the relationships?
     if length(new_IDs) == 0
         e = error("no new sequences in alignment - did you mean to use --additive?")
         throw(e)
@@ -127,6 +141,15 @@ function additive(parsed_args, ref_array, nucleotide_array, fasta_IDs)
     else
 
         combined_tip_to_seq_relationships = updated_tip_to_seq_relationships
+    end
+
+    println("number of sequences in output dataset: ", length(TEST_get_dict_levels(combined_tip_to_seq_relationships)))
+    println("number of sequences in output alignment: ", length(keys(combined_tip_to_seq_relationships)))
+
+    if parsed_args["check"]
+        final_sets = TEST_get_sets_from_relationships(fasta_IDs, combined_tip_to_seq_relationships)
+        safe_sets_test = TEST_compare_within_sets(collect(final_sets), nucleotide_array)
+        println("safe sets test (true/false): ", safe_sets_test)
     end
 
     write_fasta(combined_tip_to_seq_relationships, nucleotide_array, fasta_IDs, parsed_args["outfile"], false)
