@@ -26,14 +26,18 @@ end
 function main()
     parsed_args = parse_commandline()
 
-    @time ref_array, ref_ID = populate_byte_array_get_names(parsed_args["reference"])
+    ref_array, ref_ID = populate_byte_array_get_names(parsed_args["reference"])
 
-    @time nucleotide_array_1, fasta_IDs = populate_byte_array_get_names(parsed_args["infile1"])
+    nucleotide_array_1, fasta_IDs_1 = populate_byte_array_get_names(parsed_args["infile1"])
 
-    @time snpmat = pairsnp(nucleotide_array_1, ref_array)
-
-    @time write_pairsnp(parsed_args["outfile"], snpmat, fasta_IDs)
-
+    if parsed_args["infile2"] != nothing
+        nucleotide_array_2, fasta_IDs_2 = populate_byte_array_get_names(parsed_args["infile2"])
+        snpmat = pairsnp_rectangle(nucleotide_array_1, nucleotide_array_2, ref_array)
+        write_pairsnp_rectangle(parsed_args["outfile"], snpmat, fasta_IDs_1, fasta_IDs_2)
+    else
+        snpmat = pairsnp_square(nucleotide_array_1, ref_array)
+        write_pairsnp_square(parsed_args["outfile"], snpmat, fasta_IDs_1)
+    end
 end
 
 main()
