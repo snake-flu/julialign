@@ -13,7 +13,7 @@ Julialign uses a slightly modified version of the bit-level coding scheme for nu
 | run              | description                                                                        |
 |------------------|------------------------------------------------------------------------------------|
 | src/bootstrap.jl | Bootstrap an alignment by sampling sites with replacement                          |
-| src/closest.jl   | Find the closest sequence to a query by SNP-distance                             |
+| src/closest.jl   | Find the closest sequence to a query by raw-distance                             |
 | src/collapse.jl  | Heuristic for stripping out the redundancy from a set of similar sequences |
 | src/del_typer.jl | Type alignments for pre-specified deletions                                        |
 
