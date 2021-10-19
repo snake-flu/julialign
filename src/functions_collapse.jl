@@ -354,6 +354,10 @@ function parallel_get_subsets(array_of_sets)
         tests[i] = true
     end
 
+    # NB - dont need to compare all the sets with all the other sets because the only sets that can
+    # possibly be subsets of the tested set are those that share an element with it - so just iterate
+    # over the focal set's rows. But can't do this as it stands because array_of_sets is a view of the
+    # sets so its indices don't match the numbers in each set
     Threads.@threads for i in 1:size(array_of_sets, 1)
         for j in 1:size(array_of_sets, 1)
             if i == j
