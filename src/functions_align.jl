@@ -295,3 +295,38 @@ function score_alignment2(nuc_bit_array)
 
     return A
 end
+
+function consensus(nuc_bit_array)
+    score = Vector{Int}(undef, 256)
+    for i in 1:length(score)
+        score[i] = 5
+    end
+    score[136] = 1 # => 'A'
+    score[72] = 2 # => 'G'
+    score[40] = 3 # => 'C'
+    score[24] = 4 # => 'T'
+
+    consensus_array = zeros(Int, size(nuc_bit_array, 1), 5)
+    for j in 1:size(nuc_bit_array, 2)
+        for i in 1:size(nuc_bit_array, 1)
+            nuc = nuc_bit_array[i, j]
+            consensus_array[i, score[nuc]] += 1
+        end
+    end
+
+    backtranslate = [0x88, 0x48, 0x28, 0x18]
+    consensus = Vector{UInt8}(undef, size(nuc_bit_array, 1))
+    for i in 1:size(consensus_array, 1)
+        maxval = consensus_array[i,1]
+        maxidx = 1
+        for j in 2:4
+            if consensus_array[i,j] > maxval
+                maxval = consensus_array[i,j]
+                maxidx = j
+            end
+        end
+        consensus[i] = backtranslate[maxidx]
+    end
+
+    return consensus
+end
