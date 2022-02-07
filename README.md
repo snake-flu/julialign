@@ -21,7 +21,7 @@ Julialign uses a slightly modified version of the bit-level coding scheme for nu
 
 For example, issue
 
-`julia src/collapse.jl -i input.fasta` at the command line to run the collapse function.
+`julia src/collapse.jl -i input.fasta -r reference.fasta` at the command line to run the collapse function.
 
 Run any function with the `-h` flag to get a full list of options, e.g. `julia src/bootsrap.jl -h`
 
