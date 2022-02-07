@@ -16,7 +16,7 @@ Julialign uses a slightly modified version of the bit-level coding scheme for nu
 | src/closest.jl   | Find the closest sequence to a query by raw-distance                             |
 | src/collapse.jl  | Heuristic for stripping out the redundancy from a set of similar sequences |
 | src/del_typer.jl | Type alignments for pre-specified deletions                                        |
-| src/pairsnp.jl   | Get pairwise SNP distances between alignment(s)                                      |
+| src/pairsnp.jl   | Get pairwise SNP distances within/between alignments                                      |
 
 
 For example, issue
